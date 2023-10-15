@@ -2,23 +2,35 @@ package com.example.ajoittaja
 
 import android.Manifest
 import android.app.Activity
+import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.companion.AssociationRequest
 import android.companion.BluetoothDeviceFilter
 import android.companion.CompanionDeviceManager
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
+import android.os.Binder
 import android.os.Bundle
+import android.os.IBinder
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat.getSystemService
 import androidx.navigation.findNavController
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.navigateUp
@@ -28,6 +40,16 @@ import com.google.android.material.snackbar.Snackbar
 
 private const val SELECT_DEVICE_REQUEST_CODE = 0
 private const val REQUEST_ENABLE_BT = 1
+
+val bluetoothGattCallback = object : BluetoothGattCallback() {
+    override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
+        if (newState == BluetoothProfile.STATE_CONNECTED) {
+            // successfully connected to the GATT Server
+        } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+            // disconnected from the GATT Server
+        }
+    }
+}
 
 class MainActivity : AppCompatActivity() {
     private lateinit var appBarConfiguration: AppBarConfiguration
@@ -61,7 +83,11 @@ class MainActivity : AppCompatActivity() {
         appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
 
+        val test = BluetoothLeService()
+
         binding.fab.setOnClickListener { view ->
+            test.discoverServices()
+
             Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
                 .setAction("Action", null).show()
         }
@@ -116,6 +142,9 @@ class MainActivity : AppCompatActivity() {
                 // Handle the failure.
             }
         }, null)
+
+
+
     }
 
     // TODO: Replace deprecated things
@@ -157,4 +186,52 @@ class MainActivity : AppCompatActivity() {
         val navController = findNavController(R.id.nav_host_fragment_content_main)
         return navController.navigateUp(appBarConfiguration) || super.onSupportNavigateUp()
     }
+}
+
+private const val TAG = "BluetoothLeService"
+
+class BluetoothLeService : Service() {
+    private val binder = LocalBinder()
+
+    private lateinit var bluetoothManager: BluetoothManager
+    private var bluetoothAdapter: BluetoothAdapter? = null
+
+    private var bluetoothGatt: BluetoothGatt? = null
+
+    private val bluetoothGattCallback = object : BluetoothGattCallback() {
+        // ... (Your existing BluetoothGattCallback methods)
+    }
+
+    inner class LocalBinder : Binder() {
+        fun getService(): BluetoothLeService {
+            return this@BluetoothLeService
+        }
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        return binder
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+
+        // Initialize Bluetooth manager and adapter
+        bluetoothManager = getSystemService(BluetoothManager::class.java)
+        bluetoothAdapter = bluetoothManager.adapter
+    }
+
+    fun connect(address: String): Boolean {
+        val bluetoothDevice = bluetoothAdapter?.getRemoteDevice(address)
+        if (bluetoothDevice != null) {
+            bluetoothGatt = bluetoothDevice.connectGatt(this, false, bluetoothGattCallback)
+            return true
+        }
+        return false
+    }
+
+    fun discoverServices() {
+        bluetoothGatt?.discoverServices()
+    }
+
+    // ... (Your existing methods)
 }
