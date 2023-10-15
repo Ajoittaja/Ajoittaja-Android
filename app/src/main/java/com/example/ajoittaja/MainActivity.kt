@@ -1,9 +1,16 @@
 package com.example.ajoittaja
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.companion.AssociationRequest
+import android.companion.BluetoothDeviceFilter
+import android.companion.CompanionDeviceManager
+import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.Menu
@@ -19,12 +26,14 @@ import androidx.navigation.ui.setupActionBarWithNavController
 import com.example.ajoittaja.databinding.ActivityMainBinding
 import com.google.android.material.snackbar.Snackbar
 
+private const val SELECT_DEVICE_REQUEST_CODE = 0
+private const val REQUEST_ENABLE_BT = 1
+
 class MainActivity : AppCompatActivity() {
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
 
-    // Bluetooth permission
-    private val REQUESTENABLEBT = 1
+    // Bluetooth permission launcher
     private val blRequestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -33,6 +42,11 @@ class MainActivity : AppCompatActivity() {
         } else {
             Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    // Companion device manager
+    private val deviceManager: CompanionDeviceManager by lazy {
+        getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,7 +86,54 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             // TODO: Use ActivityResultContract
-            startActivityForResult(enableBtIntent, REQUESTENABLEBT)
+            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
+        }
+
+        // To skip filters based on names and supported feature flags (UUIDs),
+        // omit calls to setNamePattern() and addServiceUuid()
+        // respectively, as shown in the following  Bluetooth example.
+        val deviceFilter: BluetoothDeviceFilter = BluetoothDeviceFilter.Builder()
+            //.setNamePattern(Pattern.compile("My device"))
+            //.addServiceUuid(ParcelUuid(UUID(0x123abcL, -1L)), null)
+            .build()
+
+        // The argument provided in setSingleDevice() determines whether a single
+        // device name or a list of them appears.
+        val pairingRequest: AssociationRequest =
+            AssociationRequest.Builder().addDeviceFilter(deviceFilter).setSingleDevice(false)
+                .build()
+
+        // When the app tries to pair with a Bluetooth device, show the
+        // corresponding dialog box to the user.
+        deviceManager.associate(pairingRequest, object : CompanionDeviceManager.Callback() {
+            override fun onDeviceFound(chooserLauncher: IntentSender) {
+                // TODO: Use ActivityResultContract
+                startIntentSenderForResult(
+                    chooserLauncher, SELECT_DEVICE_REQUEST_CODE, null, 0, 0, 0
+                )
+            }
+            override fun onFailure(error: CharSequence?) {
+                // Handle the failure.
+            }
+        }, null)
+    }
+
+    // TODO: Replace deprecated things
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        when (requestCode) {
+            SELECT_DEVICE_REQUEST_CODE -> when (resultCode) {
+                Activity.RESULT_OK -> {
+                    // The user chose to pair the app with a Bluetooth device.
+                    val deviceToPair: BluetoothDevice? =
+                        data?.getParcelableExtra(CompanionDeviceManager.EXTRA_DEVICE)
+                    deviceToPair?.let { device ->
+                        device.createBond()
+                        // Maintain continuous interaction with a paired device.
+                    }
+                }
+            }
+
+            else -> super.onActivityResult(requestCode, resultCode, data)
         }
     }
 
