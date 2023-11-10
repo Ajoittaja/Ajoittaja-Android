@@ -32,6 +32,7 @@ import java.util.regex.Pattern
 
 private const val SELECT_DEVICE_REQUEST_CODE = 0
 private const val REQUEST_ENABLE_BT = 1
+private val REQUEST_BLUETOOTH_PERMISSION = 1
 
 class MainActivity : AppCompatActivity() {
 
@@ -152,7 +153,30 @@ class MainActivity : AppCompatActivity() {
                     val deviceToPair: BluetoothDevice? =
                         data?.getParcelableExtra(CompanionDeviceManager.EXTRA_DEVICE)
                     deviceToPair?.let { device ->
-                        device.createBond()
+                        if (ActivityCompat.checkSelfPermission(
+                                this,
+                                Manifest.permission.BLUETOOTH_CONNECT
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            // TODO: Consider calling
+                            //    ActivityCompat#requestPermissions
+                            // here to request the missing permissions, and then overriding
+                            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                            //                                          int[] grantResults)
+                            // to handle the case where the user grants the permission. See the documentation
+                            // for ActivityCompat#requestPermissions for more details.
+                            //return
+                            // Permission is not granted, request it.
+                            ActivityCompat.requestPermissions(
+                                this,
+                                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                                REQUEST_BLUETOOTH_PERMISSION
+                            )
+                        } else  {
+                            // Permission has already been granted
+                            device.createBond()
+                        }
+                       // device.createBond()
                         // Maintain continuous interaction with a paired device.
                     }
                 }
