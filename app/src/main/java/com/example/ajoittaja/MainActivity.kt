@@ -4,17 +4,22 @@ import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.companion.AssociationInfo
 import android.companion.AssociationRequest
 import android.companion.BluetoothDeviceFilter
 import android.companion.CompanionDeviceManager
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.net.MacAddress
 import android.os.Bundle
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.Toast
@@ -33,11 +38,15 @@ import java.util.regex.Pattern
 private const val SELECT_DEVICE_REQUEST_CODE = 0
 private const val REQUEST_ENABLE_BT = 1
 private val REQUEST_BLUETOOTH_PERMISSION = 1
+private const val ACTION_GATT_SERVICES_DISCOVERED =
+    "com.example.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED"
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
+
+    val bluetoothAdapter: BluetoothAdapter? = null
 
 
     // Bluetooth permission launcher
@@ -59,6 +68,26 @@ class MainActivity : AppCompatActivity() {
         getSystemService(java)!!.adapter
     }
     val executor: Executor = Executor { it.run() }
+
+    private var bluetoothGatt: BluetoothGatt? = null
+    private val bluetoothGattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                // successfully connected to the GATT Server
+                bluetoothGatt?.discoverServices()
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                // disconnected from the GATT Server
+            }
+        }
+        override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED)
+            } else {
+                //Log.w(BluetoothService.TAG, "onServicesDiscovered received: $status")
+            }
+        }
+    }
+
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -143,7 +172,33 @@ class MainActivity : AppCompatActivity() {
 
             }
         )
+        deviceManager.myAssociations.forEach {
+            Log.d(TAG, "Association: ${it.id} ${it.deviceMacAddress}")
+            connect(it.deviceMacAddress.toString())
+        }
     }
+
+    private fun broadcastUpdate(action: String) {
+        val intent = Intent(action)
+        sendBroadcast(intent)
+    }
+
+    fun connect(address: String): Boolean {
+        bluetoothAdapter?.let { adapter ->
+            try {
+                val device = adapter.getRemoteDevice(address)
+            } catch (exception: IllegalArgumentException) {
+                Log.w(TAG, "Device not found with provided address.")
+                return false
+            }
+            // connect to the GATT server on the device
+        } ?: run {
+            Log.w(TAG, "BluetoothAdapter not initialized")
+            return false
+        }
+        return true
+    }
+
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         when (requestCode) {
@@ -172,12 +227,10 @@ class MainActivity : AppCompatActivity() {
                                 arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
                                 REQUEST_BLUETOOTH_PERMISSION
                             )
-                        } else  {
-                            // Permission has already been granted
-                            device.createBond()
                         }
-                       // device.createBond()
+                        device.createBond()
                         // Maintain continuous interaction with a paired device.
+                        bluetoothGatt = device.connectGatt(this, true, bluetoothGattCallback)
                     }
                 }
             }
